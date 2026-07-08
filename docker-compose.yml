@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ztd
+      POSTGRES_PASSWORD: ztd
+      POSTGRES_DB: ztd
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ztd -d ztd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:13133/ || exit 0"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  catalog:
+    build:
+      context: ./services/catalog
+    environment:
+      PORT: "8080"
+      OTEL_SERVICE_NAME: catalog
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/catalog", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  orders:
+    build:
+      context: ./services/orders
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgresql://ztd:ztd@postgres:5432/ztd
+      CATALOG_URL: http://catalog:8080
+      OTEL_SERVICE_NAME: orders
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      catalog:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/healthz', timeout=2).status == 200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    environment:
+      PORT: "8080"
+      CATALOG_URL: http://catalog:8080
+      ORDERS_URL: http://orders:8080
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    depends_on:
+      catalog:
+        condition: service_started
+      orders:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:'+(process.env.PORT||8080)+'/healthz', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./services/frontend
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8080
+    depends_on:
+      api-gateway:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres-data:
