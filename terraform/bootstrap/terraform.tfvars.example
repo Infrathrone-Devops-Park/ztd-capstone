@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars (gitignored) and adjust if needed.
+region      = "ap-south-1"
+aws_profile = "infrathrone-new"
+account_id  = "514422154867"
+project     = "ztd-capstone"
