@@ -3,7 +3,9 @@ resource "aws_ecr_repository" "service" {
 
   name                 = "${var.project}/${each.value}"
   image_tag_mutability = "IMMUTABLE"
-  force_delete         = false
+  # force_delete allows a clean full teardown even when images are present
+  # (the whole capstone is torn down for recreate-from-zero verification).
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true

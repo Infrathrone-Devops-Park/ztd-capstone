@@ -267,10 +267,9 @@ git -c user.name="SaiPisey2" -c user.email="piseysai0202@gmail.com" commit -m "f
 resource "aws_s3_bucket" "tfstate" {
   bucket = "${var.project}-tfstate-${var.account_id}"
 
-  # Persistent layer — guard against accidental deletion of the state bucket.
-  lifecycle {
-    prevent_destroy = true
-  }
+  # force_destroy allows a clean full teardown (empty + delete) when the whole
+  # capstone is torn down for recreate-from-zero verification.
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_versioning" "tfstate" {
@@ -370,7 +369,8 @@ resource "aws_ecr_repository" "service" {
 
   name                 = "${var.project}/${each.value}"
   image_tag_mutability = "IMMUTABLE"
-  force_delete         = false
+  # force_delete allows a clean full teardown even when images are present.
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true
