@@ -1,0 +1,33 @@
+# secrets & env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+
+# kube
+kubeconfig
+*.kubeconfig
+
+# node / python / go build junk
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+bin/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
