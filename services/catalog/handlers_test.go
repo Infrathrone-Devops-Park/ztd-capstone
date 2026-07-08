@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,42 @@ func TestReadyz(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestPostProductsMethodNotAllowed(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/products", nil)
+	rec := httptest.NewRecorder()
+
+	newRouter().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("expected Allow header GET, got %q", got)
+	}
+}
+
+// TestBestEffortTracingBadEndpoint verifies that a bogus OTLP endpoint does
+// not crash startup: initTracingBestEffort returns without aborting the
+// process, and the router still serves /healthz with 200. (initTracingBestEffort
+// swallows any init error and returns nil rather than calling os.Exit.)
+func TestBestEffortTracingBadEndpoint(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://%%%bad-endpoint")
+
+	tp := initTracingBestEffort(context.Background())
+	if tp != nil {
+		// If the SDK tolerated the endpoint and built a provider, clean it up.
+		_ = tp.Shutdown(context.Background())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	newRouter().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected /healthz 200 even with bad OTLP endpoint, got %d", rec.Code)
 	}
 }
 

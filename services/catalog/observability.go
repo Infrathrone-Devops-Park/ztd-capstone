@@ -17,7 +17,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// logger is the shared structured JSON logger used across the service for
+// startup/shutdown and per-request access logs.
+var logger = newLogger()
 
 // httpRequestDuration is the shared HTTP request duration histogram exposed
 // at /metrics as http_request_duration_seconds, labeled by method, route and
@@ -83,6 +88,19 @@ func initTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
 	return tp, nil
 }
 
+// initTracingBestEffort initializes the tracer provider but never aborts the
+// process on failure. On error it logs a JSON warning and returns nil, leaving
+// the default no-op tracer provider in place so the service keeps serving even
+// when OTEL_EXPORTER_OTLP_ENDPOINT is malformed or unreachable.
+func initTracingBestEffort(ctx context.Context) *sdktrace.TracerProvider {
+	tp, err := initTracerProvider(ctx)
+	if err != nil {
+		logger.Warn("tracing disabled: failed to initialize tracer provider", "error", err.Error())
+		return nil
+	}
+	return tp
+}
+
 // metricsHandler exposes the Prometheus registry (default process metrics +
 // the http_request_duration_seconds histogram) at /metrics.
 func metricsHandler() http.Handler {
@@ -101,16 +119,46 @@ func (r *statusRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
-// withMetrics wraps a handler, recording request duration against
-// httpRequestDuration labeled by method, route and status.
-func withMetrics(route string, next http.HandlerFunc) http.HandlerFunc {
+// getOnly enforces that a route only accepts GET, responding 405 with a JSON
+// error (and an Allow header) for any other method. The 405 still flows
+// through instrument so it is recorded and access-logged.
+func getOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		next(w, r)
+	}
+}
+
+// instrument wraps a handler to (1) record request duration against
+// httpRequestDuration labeled by method, route and status, and (2) emit one
+// structured JSON access-log line per request to stdout including method,
+// route (the template, not the raw path), status, duration_ms and — when a
+// valid span context is present — the trace_id, enabling log<->trace
+// correlation in Loki/Tempo.
+func instrument(route string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
 		next(rec, r)
 
+		dur := time.Since(start)
 		httpRequestDuration.WithLabelValues(r.Method, route, strconv.Itoa(rec.status)).
-			Observe(time.Since(start).Seconds())
+			Observe(dur.Seconds())
+
+		attrs := []any{
+			"method", r.Method,
+			"route", route,
+			"status", rec.status,
+			"duration_ms", float64(dur.Microseconds()) / 1000.0,
+		}
+		if sc := trace.SpanContextFromContext(r.Context()); sc.HasTraceID() {
+			attrs = append(attrs, "trace_id", sc.TraceID().String())
+		}
+		logger.Info("http_request", attrs...)
 	}
 }

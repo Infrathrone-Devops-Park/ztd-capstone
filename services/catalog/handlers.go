@@ -49,17 +49,17 @@ func handleProducts(w http.ResponseWriter, r *http.Request) {
 	handleGetProductByID(w, r)
 }
 
-// newRouter wires all routes with the request-duration metrics middleware
-// applied to application routes, and /metrics exposing the Prometheus
-// registry.
+// newRouter wires all routes. Every route is GET-only (405 otherwise) and is
+// wrapped with instrument for request-duration metrics + per-request JSON
+// access logging. /metrics exposes the Prometheus registry.
 func newRouter() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/products", withMetrics("/products", handleProducts))
-	mux.HandleFunc("/products/", withMetrics("/products/:id", handleProducts))
-	mux.HandleFunc("/healthz", withMetrics("/healthz", handleHealthz))
-	mux.HandleFunc("/readyz", withMetrics("/readyz", handleReadyz))
-	mux.Handle("/metrics", metricsHandler())
+	mux.HandleFunc("/products", instrument("/products", getOnly(handleProducts)))
+	mux.HandleFunc("/products/", instrument("/products/:id", getOnly(handleProducts)))
+	mux.HandleFunc("/healthz", instrument("/healthz", getOnly(handleHealthz)))
+	mux.HandleFunc("/readyz", instrument("/readyz", getOnly(handleReadyz)))
+	mux.HandleFunc("/metrics", instrument("/metrics", getOnly(metricsHandler().ServeHTTP)))
 
 	return mux
 }

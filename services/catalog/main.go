@@ -25,17 +25,16 @@ func main() {
 		return
 	}
 
-	logger := newLogger()
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	tp, err := initTracerProvider(ctx)
-	if err != nil {
-		logger.Error("failed to initialize tracer provider", "error", err.Error())
-		os.Exit(1)
-	}
+	// Tracing is best-effort: a bad/unreachable OTLP endpoint must not stop the
+	// service from serving /healthz, /products, etc.
+	tp := initTracingBestEffort(ctx)
 	defer func() {
+		if tp == nil {
+			return
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := tp.Shutdown(shutdownCtx); err != nil {
