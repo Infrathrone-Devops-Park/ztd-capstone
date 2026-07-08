@@ -53,3 +53,14 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def main() -> None:
+    """Console entrypoint: run uvicorn honoring the PORT env (12-factor)."""
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=settings.port)
+
+
+if __name__ == "__main__":
+    main()

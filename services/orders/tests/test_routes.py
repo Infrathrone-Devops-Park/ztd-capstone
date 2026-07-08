@@ -146,6 +146,19 @@ def test_metrics_endpoint_exposes_histogram(client):
     assert "http_request_duration_seconds" in response.text
 
 
+def test_default_port_is_8080():
+    from app.config import Settings
+
+    assert Settings().port == 8080
+
+
+def test_port_env_is_honored(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.setenv("PORT", "9090")
+    assert Settings().port == 9090
+
+
 def test_orders_wrong_method_returns_405(client):
     response = client.put("/orders", json={"productId": "p1", "quantity": 1})
 

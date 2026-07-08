@@ -117,6 +117,13 @@ def instrument_app(app) -> None:
     except Exception:
         logger.warning("httpx instrumentation failed; continuing without it")
 
+    try:
+        from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
+
+        PsycopgInstrumentor().instrument()
+    except Exception:
+        logger.warning("psycopg instrumentation failed; continuing without it")
+
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

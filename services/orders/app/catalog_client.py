@@ -8,6 +8,7 @@ W3C traceparent header, propagating the active trace context downstream.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -19,8 +20,9 @@ class CatalogClient:
 
     async def get_product(self, product_id: str) -> dict[str, Any] | None:
         """Return the product dict, or None if unknown/invalid/unreachable."""
+        encoded_id = quote(product_id, safe="")
         try:
-            response = await self._client.get(f"{self._base_url}/products/{product_id}")
+            response = await self._client.get(f"{self._base_url}/products/{encoded_id}")
         except httpx.HTTPError:
             return None
         if response.status_code != 200:
