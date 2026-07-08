@@ -19,12 +19,12 @@ services:
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:13133/ || exit 0"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
+    # The health_check extension serves a real liveness endpoint on :13133 (used by
+    # k8s/external probes). No container-level HEALTHCHECK is set because this image is
+    # distroless — it ships only /otelcol-contrib, with no shell or HTTP client, so an
+    # in-container exec probe is impossible. Dependents wait on `service_started`.
+    expose:
+      - "13133"
 
   catalog:
     build:
@@ -56,7 +56,7 @@ services:
       postgres:
         condition: service_healthy
       catalog:
-        condition: service_started
+        condition: service_healthy
       otel-collector:
         condition: service_started
     healthcheck:
