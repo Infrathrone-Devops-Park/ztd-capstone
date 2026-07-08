@@ -1,0 +1,17 @@
+{{- range $svcName, $svc := .Values.services }}
+{{- if $svc.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ztd.svcFullname" (dict "root" $ "service" $svcName) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" $svcName) | nindent 4 }}
+spec:
+  minAvailable: {{ $svc.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $svcName) | nindent 6 }}
+---
+{{- end }}
+{{- end }}
