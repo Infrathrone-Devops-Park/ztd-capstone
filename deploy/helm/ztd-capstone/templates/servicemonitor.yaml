@@ -1,0 +1,22 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- range $svcName, $svc := .Values.services }}
+{{- if $svc.metrics.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "ztd.svcFullname" (dict "root" $ "service" $svcName) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" $svcName) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $svcName) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ $svc.metrics.path }}
+      interval: 30s
+---
+{{- end }}
+{{- end }}
+{{- end }}
