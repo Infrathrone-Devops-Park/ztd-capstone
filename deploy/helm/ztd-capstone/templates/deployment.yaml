@@ -87,14 +87,14 @@ spec:
           {{- if $svc.writablePaths }}
           volumeMounts:
             {{- range $svc.writablePaths }}
-            - name: {{ . | trimPrefix "/" | replace "/" "-" | default "root" }}
+            - name: {{ . | trimPrefix "/" | replace "/" "-" | replace "." "-" | lower | default "root" }}
               mountPath: {{ . }}
             {{- end }}
           {{- end }}
       {{- if $svc.writablePaths }}
       volumes:
         {{- range $svc.writablePaths }}
-        - name: {{ . | trimPrefix "/" | replace "/" "-" | default "root" }}
+        - name: {{ . | trimPrefix "/" | replace "/" "-" | replace "." "-" | lower | default "root" }}
           emptyDir: {}
         {{- end }}
       {{- end }}

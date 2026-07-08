@@ -97,4 +97,63 @@ spec:
           port: 5432
     {{- end }}
 {{- end }}
+
+{{- if .Values.postgres.enabled }}
+---
+# Allow ingress to postgres on 5432 only from services declaring
+# allowEgressToPostgres (orders). Without this the default-deny policy
+# (podSelector:{}) would also match the postgres pod and block the
+# orders -> postgres:5432 connection once policies are enforced.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ztd.fullname" . }}-postgres-allow-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" "postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" "postgres") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- range $svcName, $svc := .Values.services }}
+        {{- if $svc.allowEgressToPostgres }}
+        - podSelector:
+            matchLabels:
+              {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $svcName) | nindent 14 }}
+        {{- end }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Zero-trust egress for postgres: DNS resolution only (it initiates no
+# other outbound connections).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ztd.fullname" . }}-postgres-allow-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" "postgres") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" "postgres") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
 {{- end }}

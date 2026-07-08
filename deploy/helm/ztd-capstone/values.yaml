@@ -139,9 +139,11 @@ services:
     port: 8080
     replicas: 1
     securityContext:
-      runAsUser: 1000
-      runAsGroup: 1000
-      fsGroup: 1000
+      # orders image creates its "app" user via `useradd --system` on
+      # python:3.12-slim, which allocates UID/GID 999.
+      runAsUser: 999
+      runAsGroup: 999
+      fsGroup: 999
     resources:
       requests:
         cpu: 100m
