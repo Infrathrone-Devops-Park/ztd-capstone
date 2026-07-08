@@ -1,0 +1,41 @@
+# Dev overrides — single replica, minimal resources, HPA/PDB off.
+image:
+  tag: dev
+
+ingress:
+  host: dev.ztd-capstone.example.com
+
+networkPolicy:
+  enabled: true
+
+services:
+  catalog:
+    replicas: 1
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+  orders:
+    replicas: 1
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+  api-gateway:
+    replicas: 1
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+  frontend:
+    replicas: 1
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+postgres:
+  storage: 2Gi

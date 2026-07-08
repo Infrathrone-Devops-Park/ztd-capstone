@@ -1,0 +1,29 @@
+ztd-capstone has been installed into namespace "{{ .Release.Namespace }}" (release "{{ .Release.Name }}").
+
+Services deployed:
+{{- range $name, $svc := .Values.services }}
+  - {{ $name }} (ClusterIP Service "{{ $name }}", port 80 -> {{ $svc.port }})
+{{- end }}
+{{- if .Values.postgres.enabled }}
+  - postgres (headless Service "postgres", port 5432)
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Frontend is exposed via ingress-nginx at:
+  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/
+{{- end }}
+
+Before traffic will flow:
+  1. Ensure the Secret "{{ .Values.postgres.existingSecretName }}" exists in this
+     namespace with keys "{{ .Values.postgres.secretPasswordKey }}" and
+     "{{ .Values.postgres.secretDatabaseUrlKey }}" (this chart never creates or
+     commits that Secret — it is provisioned out-of-band, e.g. by CI/Phase 4).
+  2. Confirm the "{{ .Values.nodeSelector.workload }}"-labelled nodegroup exists
+     (nodeSelector: workload={{ .Values.nodeSelector.workload }} is set on every pod).
+  3. Confirm the ingress-nginx controller is running in the "ingress-nginx"
+     namespace (labelled kubernetes.io/metadata.name=ingress-nginx) — the
+     zero-trust NetworkPolicies allow ingress traffic from that namespace only.
+
+Check rollout status:
+  kubectl -n {{ .Release.Namespace }} get pods,svc,ingress

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: ztd-capstone
+description: >-
+  Umbrella Helm chart for the ztd-capstone application — deploys the
+  frontend, api-gateway, orders, and catalog services plus a Postgres
+  StatefulSet, with production-grade resource limits, probes, HPA/PDB,
+  zero-trust NetworkPolicies, Prometheus ServiceMonitors, and an
+  ingress-nginx Ingress for the frontend.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ztd-capstone
+  - zero-trust
+  - microservices
+maintainers:
+  - name: SaiPisey2

@@ -1,0 +1,286 @@
+# Default values for ztd-capstone.
+# This is a YAML-formatted file. Values here are the common defaults;
+# values-{dev,staging,prod}.yaml layer environment-specific overrides on top
+# (helm template/install/upgrade -f values.yaml -f values-<env>.yaml).
+
+nameOverride: ""
+fullnameOverride: ""
+
+# -----------------------------------------------------------------------
+# Global image defaults. Per-service repo is set under services.<svc>.image.
+# -----------------------------------------------------------------------
+image:
+  registry: 514422154867.dkr.ecr.ap-south-1.amazonaws.com
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# Pin all app + postgres pods to the dedicated Phase 4 nodegroup.
+nodeSelector:
+  workload: platform
+
+# Tolerations if the nodegroup is tainted. Empty by default.
+tolerations: []
+
+networkPolicy:
+  # Master switch for the default-deny + per-service allow NetworkPolicies.
+  enabled: true
+
+metrics:
+  serviceMonitor:
+    # Master switch — disable when the Prometheus Operator CRDs are not
+    # installed in the target cluster.
+    enabled: true
+
+# -----------------------------------------------------------------------
+# Frontend Ingress (ingress-nginx). Host is environment-specific and is
+# overridden in values-{dev,staging,prod}.yaml.
+# -----------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  host: ztd-capstone.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  tls:
+    enabled: false
+    secretName: ""
+
+# -----------------------------------------------------------------------
+# Postgres (single-replica StatefulSet). No secrets are committed here —
+# the chart only references the Secret name/keys; the Secret itself is
+# created out-of-band at deploy time (Phase 4 / CI).
+# -----------------------------------------------------------------------
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16"
+  db: ztd
+  user: ztd
+  # Name of the pre-existing Secret holding Postgres credentials.
+  existingSecretName: ztd-capstone-postgres
+  # Key inside the Secret holding the raw POSTGRES_PASSWORD value.
+  secretPasswordKey: postgres-password
+  # Key inside the Secret holding the full DATABASE_URL connection string
+  # (postgresql://user:pass@postgres:5432/db) consumed by the orders service.
+  secretDatabaseUrlKey: database-url
+  storageClassName: gp2
+  storage: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  securityContext:
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+  nodeSelector:
+    workload: platform
+
+# -----------------------------------------------------------------------
+# Application services. Every entry follows the same schema; ranged over
+# by templates/{deployment,service,hpa,pdb,servicemonitor,networkpolicy}.yaml.
+# -----------------------------------------------------------------------
+services:
+  catalog:
+    image:
+      repo: ztd-capstone/catalog
+      tagOverride: ""
+    port: 8080
+    replicas: 1
+    securityContext:
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPU: 70
+    pdb:
+      enabled: false
+      minAvailable: 1
+    metrics:
+      enabled: true
+      path: /metrics
+    live:
+      path: /healthz
+    ready:
+      path: /readyz
+    env:
+      - name: OTEL_SERVICE_NAME
+        value: catalog
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector.observability.svc.cluster.local:4318
+    envFromSecret: []
+    # Service names permitted to reach this service on its container port.
+    allowFrom:
+      - api-gateway
+    # Service names (+ optionally "postgres") this service is allowed to
+    # call on egress.
+    allowEgressTo: []
+    writablePaths:
+      - /tmp
+
+  orders:
+    image:
+      repo: ztd-capstone/orders
+      tagOverride: ""
+    port: 8080
+    replicas: 1
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 400m
+        memory: 256Mi
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPU: 70
+    pdb:
+      enabled: false
+      minAvailable: 1
+    metrics:
+      enabled: true
+      path: /metrics
+    live:
+      path: /healthz
+    ready:
+      path: /readyz
+    env:
+      - name: CATALOG_URL
+        value: http://catalog:8080
+      - name: OTEL_SERVICE_NAME
+        value: orders
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector.observability.svc.cluster.local:4318
+    envFromSecret:
+      - name: DATABASE_URL
+        secretName: ztd-capstone-postgres
+        secretKey: database-url
+    allowFrom:
+      - api-gateway
+    allowEgressTo:
+      - catalog
+    allowEgressToPostgres: true
+    writablePaths:
+      - /tmp
+
+  api-gateway:
+    image:
+      repo: ztd-capstone/api-gateway
+      tagOverride: ""
+    port: 8080
+    replicas: 1
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPU: 70
+    pdb:
+      enabled: false
+      minAvailable: 1
+    metrics:
+      enabled: true
+      path: /metrics
+    live:
+      path: /healthz
+    ready:
+      path: /readyz
+    env:
+      - name: CATALOG_URL
+        value: http://catalog:8080
+      - name: ORDERS_URL
+        value: http://orders:8080
+      - name: OTEL_SERVICE_NAME
+        value: api-gateway
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector.observability.svc.cluster.local:4318
+    envFromSecret: []
+    allowFrom:
+      - frontend
+    allowEgressTo:
+      - catalog
+      - orders
+    writablePaths:
+      - /tmp
+
+  frontend:
+    image:
+      repo: ztd-capstone/frontend
+      tagOverride: ""
+    port: 8080
+    replicas: 1
+    securityContext:
+      runAsUser: 101
+      runAsGroup: 101
+      fsGroup: 101
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPU: 70
+    pdb:
+      enabled: false
+      minAvailable: 1
+    metrics:
+      enabled: true
+      path: /metrics
+    # frontend only exposes /healthz (no separate /readyz) — both probes
+    # point at the same path.
+    live:
+      path: /healthz
+    ready:
+      path: /healthz
+    env:
+      - name: API_GATEWAY_URL
+        value: http://api-gateway:8080
+    envFromSecret: []
+    # Special peer name "ingress" is translated by templates/networkpolicy.yaml
+    # into a namespaceSelector on the existing ingress-nginx namespace.
+    allowFrom:
+      - ingress
+    allowEgressTo:
+      - api-gateway
+    # nginx-unprivileged needs writable cache/run dirs + the conf.d dir the
+    # entrypoint envsubst's into, since the root filesystem is read-only.
+    writablePaths:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+      - /etc/nginx/conf.d

@@ -1,0 +1,49 @@
+# Values used only for `helm lint` / `helm template` validation in CI and
+# local offline testing. Pins a concrete tag and turns every optional
+# feature on so all templates render fully (HPA, PDB, ServiceMonitor,
+# NetworkPolicy, Ingress, Postgres).
+image:
+  tag: "test-0001"
+
+ingress:
+  enabled: true
+  host: ci.ztd-capstone.example.com
+
+networkPolicy:
+  enabled: true
+
+metrics:
+  serviceMonitor:
+    enabled: true
+
+postgres:
+  enabled: true
+
+services:
+  catalog:
+    replicas: 2
+    hpa:
+      enabled: true
+    pdb:
+      enabled: true
+
+  orders:
+    replicas: 2
+    hpa:
+      enabled: true
+    pdb:
+      enabled: true
+
+  api-gateway:
+    replicas: 2
+    hpa:
+      enabled: true
+    pdb:
+      enabled: true
+
+  frontend:
+    replicas: 2
+    hpa:
+      enabled: true
+    pdb:
+      enabled: true

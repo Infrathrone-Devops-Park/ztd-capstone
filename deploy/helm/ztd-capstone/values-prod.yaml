@@ -1,0 +1,92 @@
+# Prod overrides — 2-3 replicas, HPA + PDB enabled, tighter/higher resources.
+image:
+  tag: prod
+
+ingress:
+  host: ztd-capstone.example.com
+
+networkPolicy:
+  enabled: true
+
+services:
+  catalog:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPU: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+
+  orders:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 600m
+        memory: 512Mi
+    hpa:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 6
+      targetCPU: 70
+    pdb:
+      enabled: true
+      minAvailable: 2
+
+  api-gateway:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPU: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+
+  frontend:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPU: 70
+    pdb:
+      enabled: true
+      minAvailable: 1
+
+postgres:
+  storage: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi

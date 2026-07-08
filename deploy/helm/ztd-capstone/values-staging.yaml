@@ -1,0 +1,41 @@
+# Staging overrides — 2 replicas, HPA/PDB off, closer to prod resources.
+image:
+  tag: staging
+
+ingress:
+  host: staging.ztd-capstone.example.com
+
+networkPolicy:
+  enabled: true
+
+services:
+  catalog:
+    replicas: 2
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+  orders:
+    replicas: 2
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+  api-gateway:
+    replicas: 2
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+  frontend:
+    replicas: 2
+    hpa:
+      enabled: false
+    pdb:
+      enabled: false
+
+postgres:
+  storage: 5Gi
