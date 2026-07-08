@@ -1,0 +1,102 @@
+{{- range $svcName, $svc := .Values.services }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ztd.svcFullname" (dict "root" $ "service" $svcName) }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" $svcName) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $svcName) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ztd.serviceLabels" (dict "root" $ "service" $svcName) | nindent 8 }}
+      {{- if and $svc.metrics $svc.metrics.enabled }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $svc.port | quote }}
+        prometheus.io/path: {{ $svc.metrics.path | quote }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "ztd.svcFullname" (dict "root" $ "service" $svcName) }}
+      {{- with ($svc.nodeSelector | default $.Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($svc.tolerations | default $.Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $svc.securityContext.runAsUser }}
+        runAsGroup: {{ $svc.securityContext.runAsGroup }}
+        fsGroup: {{ $svc.securityContext.fsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $svcName }}
+          image: {{ include "ztd.image" (dict "root" $ "svc" $svc) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+              protocol: TCP
+          {{- if or $svc.env $svc.envFromSecret }}
+          env:
+            {{- range $svc.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            {{- range $svc.envFromSecret }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: {{ $svc.live.path }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ $svc.ready.path }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          {{- if $svc.writablePaths }}
+          volumeMounts:
+            {{- range $svc.writablePaths }}
+            - name: {{ . | trimPrefix "/" | replace "/" "-" | default "root" }}
+              mountPath: {{ . }}
+            {{- end }}
+          {{- end }}
+      {{- if $svc.writablePaths }}
+      volumes:
+        {{- range $svc.writablePaths }}
+        - name: {{ . | trimPrefix "/" | replace "/" "-" | default "root" }}
+          emptyDir: {}
+        {{- end }}
+      {{- end }}
+---
+{{- end }}
