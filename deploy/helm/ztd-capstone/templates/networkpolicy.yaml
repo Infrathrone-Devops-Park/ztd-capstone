@@ -1,0 +1,100 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# Zero-trust default: deny all inbound traffic to every pod in the namespace
+# unless explicitly allowed by one of the per-service policies below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ztd.fullname" . }}-default-deny-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ztd.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress: []
+
+{{- range $svcName, $svc := .Values.services }}
+---
+# Allow ingress to {{ $svcName }} on {{ $svc.port }} from its declared peers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ztd.svcFullname" (dict "root" $ "service" $svcName) }}-allow-ingress
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" $svcName) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $svcName) | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    {{- if $svc.allowFrom }}
+    - from:
+        {{- range $peer := $svc.allowFrom }}
+        {{- if eq $peer "ingress" }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        {{- else }}
+        - podSelector:
+            matchLabels:
+              {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $peer) | nindent 14 }}
+        {{- end }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $svc.port }}
+    {{- end }}
+---
+# Allow egress from {{ $svcName }}: DNS resolution + declared peers (+ postgres).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ztd.svcFullname" (dict "root" $ "service" $svcName) }}-allow-egress
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ztd.serviceLabels" (dict "root" $ "service" $svcName) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $svcName) | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- if $svc.allowEgressTo }}
+    - to:
+        {{- range $target := $svc.allowEgressTo }}
+        - podSelector:
+            matchLabels:
+              {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" $target) | nindent 14 }}
+        {{- end }}
+      ports:
+        {{- range $target := $svc.allowEgressTo }}
+        - protocol: TCP
+          port: {{ (index $.Values.services $target).port }}
+        {{- end }}
+    {{- end }}
+    {{- if $svc.allowEgressToPostgres }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "ztd.serviceSelectorLabels" (dict "root" $ "service" "postgres") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
+{{- end }}
+{{- end }}
