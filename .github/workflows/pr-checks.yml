@@ -122,9 +122,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
+      # GATE: table format (not sarif). The trivy-action's sarif mode emits an
+      # all-severity report and gates on it regardless of `severity`, so it
+      # false-fails on MEDIUM/LOW; table mode passes `--severity HIGH,CRITICAL
+      # --exit-code 1 --ignorefile` straight to trivy and fails only on a
+      # non-ignored HIGH/CRITICAL. This is the real, active security gate.
       - name: Trivy fs + config scan (blocking on HIGH/CRITICAL)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -133,11 +137,6 @@ jobs:
           scanners: vuln,misconfig,secret
           severity: HIGH,CRITICAL
           exit-code: '1'
+          ignore-unfixed: 'false'
           trivyignores: .trivyignore
-          format: sarif
-          output: trivy-fs-results.sarif
-      - name: Upload SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-fs-results.sarif
+          format: table

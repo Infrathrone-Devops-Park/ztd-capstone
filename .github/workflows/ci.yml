@@ -14,7 +14,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      security-events: write
     strategy:
       matrix:
         service: [frontend, api-gateway, orders, catalog]
@@ -49,6 +48,11 @@ jobs:
         if: steps.exists.outputs.exists != 'true'
         run: docker build -t "local/${{ matrix.service }}:scan" "services/${{ matrix.service }}"
 
+      # GATE: table format (not sarif). The trivy-action's sarif mode emits an
+      # all-severity report and gates on it regardless of `severity`, so it
+      # false-fails on MEDIUM/LOW; table mode passes `--severity HIGH,CRITICAL
+      # --exit-code 1 --ignorefile` straight to trivy and fails only on a
+      # non-ignored HIGH/CRITICAL. This is the real, active security gate.
       - name: Trivy image scan (blocking on HIGH/CRITICAL)
         if: steps.exists.outputs.exists != 'true'
         uses: aquasecurity/trivy-action@v0.36.0
@@ -57,16 +61,9 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           exit-code: '1'
+          ignore-unfixed: 'false'
           trivyignores: .trivyignore
-          format: sarif
-          output: trivy-image-${{ matrix.service }}.sarif
-
-      - name: Upload SARIF
-        if: always() && steps.exists.outputs.exists != 'true'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-image-${{ matrix.service }}.sarif
-          category: trivy-image-${{ matrix.service }}
+          format: table
 
       - name: Login to ECR
         if: steps.exists.outputs.exists != 'true'
