@@ -1,0 +1,79 @@
+# ArgoCD (argo-cd Helm chart) values — installs into the new `argocd`
+# namespace, pinned to the dedicated platform nodegroup via
+# global.nodeSelector (applies to controller, server, repo-server, redis,
+# applicationset and notifications unless a component overrides it — none
+# do here). Nothing lands on the ng-dense nodegroup or any other namespace.
+#
+# Repo is public (github.com/Infrathrone-Devops-Park/ztd-capstone) so no
+# git credentials/repo Secret are configured — Applications reference the
+# repo URL directly over anonymous HTTPS.
+
+global:
+  nodeSelector:
+    workload: platform
+
+# Dex/SSO not needed — plain local admin auth (initial-admin-secret) is
+# enough for this lab/demo cluster.
+dex:
+  enabled: false
+
+configs:
+  params:
+    # No TLS termination inside the cluster for this phase — validation is
+    # via `kubectl port-forward svc/argocd-server`. Put a real Ingress +
+    # TLS in front of this before exposing ArgoCD outside the cluster.
+    server.insecure: true
+
+server:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  # Ingress left disabled by default — validation via port-forward.
+  # Flip to true (and set an ingress-nginx host) if external access to the
+  # ArgoCD UI is later required.
+  ingress:
+    enabled: false
+
+repoServer:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+applicationSet:
+  enabled: true
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+notifications:
+  enabled: false
+
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

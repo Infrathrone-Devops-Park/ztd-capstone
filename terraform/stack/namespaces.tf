@@ -3,7 +3,7 @@
 # kube-system, kube-public, kube-node-lease, local-path-storage).
 
 locals {
-  namespace_names = toset(["dev", "staging", "prod", "observability"])
+  namespace_names = toset(["dev", "staging", "prod", "observability", "argocd"])
 }
 
 resource "kubernetes_namespace" "this" {
