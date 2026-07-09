@@ -121,11 +121,14 @@ services:
       - name: OTEL_SERVICE_NAME
         value: catalog
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: http://otel-collector.observability.svc.cluster.local:4318
+        value: http://opentelemetry-collector.observability:4318
     envFromSecret: []
     # Service names permitted to reach this service on its container port.
+    # orders calls catalog directly (product validation) in addition to
+    # api-gateway's client-facing calls.
     allowFrom:
       - api-gateway
+      - orders
     # Service names (+ optionally "postgres") this service is allowed to
     # call on egress.
     allowEgressTo: []
@@ -168,11 +171,11 @@ services:
       path: /readyz
     env:
       - name: CATALOG_URL
-        value: http://catalog:8080
+        value: http://catalog
       - name: OTEL_SERVICE_NAME
         value: orders
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: http://otel-collector.observability.svc.cluster.local:4318
+        value: http://opentelemetry-collector.observability:4318
     envFromSecret:
       - name: DATABASE_URL
         secretName: ztd-capstone-postgres
@@ -219,13 +222,13 @@ services:
       path: /readyz
     env:
       - name: CATALOG_URL
-        value: http://catalog:8080
+        value: http://catalog
       - name: ORDERS_URL
-        value: http://orders:8080
+        value: http://orders
       - name: OTEL_SERVICE_NAME
         value: api-gateway
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: http://otel-collector.observability.svc.cluster.local:4318
+        value: http://opentelemetry-collector.observability:4318
     envFromSecret: []
     allowFrom:
       - frontend
@@ -271,7 +274,7 @@ services:
       path: /healthz
     env:
       - name: API_GATEWAY_URL
-        value: http://api-gateway:8080
+        value: http://api-gateway
     envFromSecret: []
     # Special peer name "ingress" is translated by templates/networkpolicy.yaml
     # into a namespaceSelector on the existing ingress-nginx namespace.

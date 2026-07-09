@@ -38,6 +38,36 @@ spec:
         fsGroup: {{ $svc.securityContext.fsGroup }}
         seccompProfile:
           type: RuntimeDefault
+      {{- if $svc.allowEgressToPostgres }}
+      # Block startup until Postgres is reachable. The app opens its DB
+      # connection pool once at boot; without this gate a pod that starts
+      # before Postgres (or before its DNS record exists) skips schema init
+      # and never recovers, since liveness (/healthz) stays 200. This makes
+      # the ordering deterministic across (re)deploys and reschedules.
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres 5432; do
+                echo "waiting for postgres:5432..."; sleep 2;
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      {{- end }}
       containers:
         - name: {{ $svcName }}
           image: {{ include "ztd.image" (dict "root" $ "svc" $svc) }}
