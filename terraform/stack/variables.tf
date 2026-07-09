@@ -111,18 +111,6 @@ variable "sonar_db_password" {
   sensitive   = true
 }
 
-variable "app_image_tag" {
-  description = "Immutable image tag (e.g. sha-<7hex>) shared by all four ztd-capstone service images in ECR. Set via -var app_image_tag=sha-<gitsha>."
-  type        = string
-  default     = "sha-38e32ab"
-}
-
-variable "app_deploy_enabled" {
-  description = "Toggle for deploying the ztd-capstone app helm_release into dev."
-  type        = bool
-  default     = true
-}
-
 # ---------------------------------------------------------------------------
 # release.yml (Phase 7 Task 4) promotion targets. Both default OFF (count=0)
 # so a plain `terraform apply` here is a strict no-op for these resources —
