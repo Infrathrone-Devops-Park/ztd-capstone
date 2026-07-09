@@ -98,40 +98,37 @@ jobs:
           cosign sign --yes "$digest"
           cosign attest --yes --predicate "sbom-${{ matrix.service }}.spdx.json" --type spdxjson "$digest"
 
-  deploy-dev:
+  # GitOps deploy (Phase 8): CI no longer touches the cluster at all — it
+  # just bumps image.tag in git and ArgoCD (automated sync + selfHeal on the
+  # dev Application) rolls it out from there. Only needs `contents: write`
+  # to commit the bump; no AWS/EKS credentials required for this job.
+  bump-image-tag:
     needs: build-scan-push
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - id: tag
         run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Configure AWS credentials (OIDC, no static keys)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.15.5'
-
-      # Terraform stays authoritative for the dev release (Phase 6): CI never
-      # runs `helm upgrade` directly. -target scopes the apply (and its
-      # refresh) to the app release + its direct dependencies, which is all
-      # the CI role's permissions (ECR, tfstate S3/DynamoDB, eks:DescribeCluster
-      # + the additive EKS access entry) are provisioned for — it does not
-      # need to read/refresh the nodegroup, SonarQube EC2, or other
-      # AWS-resource state that a full `terraform apply` would also refresh.
-      - name: terraform apply (roll app_image_tag into dev)
-        working-directory: terraform/stack
+      - name: Bump image.tag in values-dev.yaml
         run: |
-          terraform init -input=false
-          terraform apply -input=false -auto-approve \
-            -var "aws_profile=" \
-            -var "app_image_tag=${{ steps.tag.outputs.tag }}" \
-            -target=helm_release.app
+          sed -i '0,/^  tag:/{s/^  tag:.*/  tag: ${{ steps.tag.outputs.tag }}/}' \
+            deploy/helm/ztd-capstone/values-dev.yaml
+          grep -n "tag:" deploy/helm/ztd-capstone/values-dev.yaml | head -1
+
+      # [skip ci] on the commit message stops GitHub from triggering this
+      # workflow again for the bump commit itself (avoids a build loop).
+      - name: Commit + push (ArgoCD dev Application auto-syncs from this)
+        run: |
+          git config user.name "SaiPisey2"
+          git config user.email "piseysai0202@gmail.com"
+          git add deploy/helm/ztd-capstone/values-dev.yaml
+          if git diff --cached --quiet; then
+            echo "No image.tag change to commit (tag already at ${{ steps.tag.outputs.tag }})"
+            exit 0
+          fi
+          git commit -m "chore(dev): bump image.tag to ${{ steps.tag.outputs.tag }} [skip ci]"
+          git push origin HEAD:main
