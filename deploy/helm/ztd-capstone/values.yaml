@@ -273,8 +273,16 @@ services:
     ready:
       path: /healthz
     env:
+      # nginx's `resolver` directive ignores /etc/resolv.conf search domains,
+      # so the frontend proxy_pass upstream must be a fully-qualified name.
+      # POD_NAMESPACE (downward API) is expanded into the FQDN by kubelet's
+      # $(VAR) substitution, keeping the chart namespace-agnostic.
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
       - name: API_GATEWAY_URL
-        value: http://api-gateway
+        value: http://api-gateway.$(POD_NAMESPACE).svc.cluster.local
     envFromSecret: []
     # Special peer name "ingress" is translated by templates/networkpolicy.yaml
     # into a namespaceSelector on the existing ingress-nginx namespace.
