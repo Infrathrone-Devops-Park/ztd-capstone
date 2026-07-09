@@ -1,0 +1,156 @@
+# kube-prometheus-stack values for ztd-capstone Phase 5.
+#
+# Everything here is pinned to the dedicated "platform" nodegroup
+# (workload=platform, 2x t3.large) so nothing lands on the shared
+# ng-dense nodes. Retention/resources are kept small to fit two
+# t3.large nodes alongside the app (Phase 6).
+#
+# Chart: prometheus-community/kube-prometheus-stack (pinned in
+# terraform/stack/observability.tf)
+
+# Alertmanager not required for this phase - saves resources.
+alertmanager:
+  enabled: false
+
+# Keep the Prometheus Operator's admission webhook out of the picture:
+# we don't ship custom PrometheusRule/AlertmanagerConfig objects in this
+# phase, and disabling avoids a cluster-wide ValidatingWebhookConfiguration.
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+  # The operator's built-in TLS endpoint (conversion/admission webhook
+  # serving) relies on the cert Secret that the admission-webhook cert
+  # job generates. With admissionWebhooks disabled that job doesn't run,
+  # so the operator must not try to mount/serve TLS - otherwise it hangs
+  # on a missing "kube-prometheus-stack-admission" secret. Nothing calls
+  # the operator over TLS once the webhook is off, so this is safe.
+  tls:
+    enabled: false
+  nodeSelector:
+    workload: platform
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+prometheus:
+  prometheusSpec:
+    retention: 5d
+    replicas: 1
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    # Pick up ServiceMonitors/PodMonitors from app namespaces (dev/staging/prod)
+    # without requiring the kube-prometheus-stack release label.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    nodeSelector:
+      workload: platform
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+# node-exporter is deployed by the "prometheus-node-exporter" subchart, not
+# the "nodeExporter" key (that only toggles enable/disable + OS support).
+# Pinning nodeSelector here is what keeps the DaemonSet off ng-dense.
+prometheus-node-exporter:
+  nodeSelector:
+    workload: platform
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+kube-state-metrics:
+  nodeSelector:
+    workload: platform
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+grafana:
+  nodeSelector:
+    workload: platform
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+  # Admin credentials come from the Terraform-created Secret
+  # (kubernetes_secret.grafana_admin), never committed here.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: gp2
+    accessModes: ["ReadWriteOnce"]
+    size: 5Gi
+
+  # Dashboard sidecar picks up ConfigMaps labeled grafana_dashboard=1
+  # (see terraform/stack/observability.tf dashboard configmaps, Task 4).
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /tmp/dashboards
+      provider:
+        foldersFromFilesStructure: false
+        folder: "ztd-capstone"
+    datasources:
+      enabled: true
+
+  # Prometheus datasource is auto-provisioned by the chart itself.
+  # Loki + Tempo are added here; service names below are the ACTUAL
+  # rendered Service names from `helm template` for the pinned chart
+  # versions used in Task 2/3 (loki: "loki" port 3100, tempo: "tempo"
+  # port 3200 - NOT 3100, which is Loki's port).
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki.observability:3100
+      uid: loki
+      jsonData:
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: '"trace_id":"(\w+)"'
+            name: TraceID
+            url: "$${__value.raw}"
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.observability:3200
+      uid: tempo
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: Loki
+        serviceMap:
+          datasourceUid: prometheus
