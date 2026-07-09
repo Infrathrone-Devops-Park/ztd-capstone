@@ -19,6 +19,11 @@ RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get -y --purge autoremove \
     && rm -rf /var/lib/apt/lists/*
+# The base image ships a system pip in /usr/local/lib/python3.12/site-packages
+# (the app runs from /opt/venv and never invokes it at runtime, but Trivy
+# still scans it). Upgrade it to clear fixable pip CVEs so the image gate has
+# nothing fixable to flag.
+RUN python -m pip install --no-cache-dir --upgrade pip
 RUN groupadd --system app && useradd --system --gid app --no-create-home app
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH" \
