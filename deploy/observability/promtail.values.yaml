@@ -1,0 +1,43 @@
+# Promtail (log shipper DaemonSet) for ztd-capstone Phase 5.
+# Chart: grafana/promtail (pinned in terraform/stack/observability.tf).
+#
+# HARD REQUIREMENT: nodeSelector below restricts the DaemonSet to the
+# 2 platform (t3.large) nodes only - it must NOT run on the 2 shared
+# ng-dense (t3.small) nodes. Verify with:
+#   kubectl -n observability get daemonset promtail
+# desired == 2, not 4.
+
+daemonset:
+  enabled: true
+
+nodeSelector:
+  workload: platform
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 150m
+    memory: 128Mi
+
+config:
+  logLevel: info
+  clients:
+    - url: http://loki.observability:3100/loki/api/v1/push
+  snippets:
+    pipelineStages:
+      - cri: {}
+      - json:
+          expressions:
+            level: level
+            service: service
+            trace_id: trace_id
+      - labels:
+          level:
+          service:
+      - output:
+          source: message
+
+serviceMonitor:
+  enabled: false

@@ -1,0 +1,87 @@
+# Loki (single-binary, filesystem storage) for ztd-capstone Phase 5.
+# Chart: grafana/loki (pinned in terraform/stack/observability.tf).
+#
+# Verified via `helm template` for the pinned chart version: with
+# deploymentMode=SingleBinary and gateway.enabled=false, the chart
+# renders exactly one Service named "loki" (ClusterIP, port 3100 =
+# http-metrics / query API, port 9095 = grpc). That is the URL used
+# by the Grafana Loki datasource (kube-prometheus-stack.values.yaml)
+# and by Promtail (promtail.values.yaml).
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 72h
+    volume_enabled: true
+  # Retention requires the compactor to know where to persist delete
+  # requests; with filesystem storage this lives under the working
+  # directory on the singleBinary PVC.
+  compactor:
+    working_directory: /var/loki/compactor
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  nodeSelector:
+    workload: platform
+  persistence:
+    enabled: true
+    storageClass: gp2
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# SimpleScalable-mode components are unused in SingleBinary mode.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Disable extras we don't need at this scale (also keeps them off
+# ng-dense - none of these have a nodeSelector by default).
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+minio:
+  enabled: false
+# lokiCanary defaults to a DaemonSet with no nodeSelector - disable it
+# so it never lands on the shared ng-dense nodes.
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+monitoring:
+  serviceMonitor:
+    enabled: false
+  selfMonitoring:
+    enabled: false
+  lokiCanary:
+    enabled: false
+networkPolicy:
+  enabled: false
