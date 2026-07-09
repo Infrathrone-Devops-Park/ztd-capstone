@@ -1,0 +1,75 @@
+# OpenTelemetry Collector (traces only, deployment mode) for ztd-capstone
+# Phase 5. Chart: open-telemetry/opentelemetry-collector (pinned in
+# terraform/stack/observability.tf).
+#
+# Verified via `helm template`: with a release name of
+# "opentelemetry-collector" the rendered Service is named
+# "opentelemetry-collector" - this is the endpoint Phase 6 app pods
+# will use for OTLP: http://opentelemetry-collector.observability:4318
+# (http) / :4317 (grpc). Exports traces to tempo.observability:4317.
+#
+# `alternateConfig` (full override, no merge with chart defaults) is
+# used instead of `config` so the collector only carries the OTLP
+# receiver/exporter we need - the chart's default `config` block also
+# defines jaeger/zipkin receivers and a `debug` exporter, none of which
+# we want enabled.
+
+mode: deployment
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+command:
+  name: otelcol-contrib
+
+nodeSelector:
+  workload: platform
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+
+# Only expose the ports we actually use (otlp grpc/http); the chart's
+# default Service also defines jaeger/zipkin ports which we don't need.
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+alternateConfig:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  processors:
+    batch: {}
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+  exporters:
+    otlp/tempo:
+      endpoint: tempo.observability:4317
+      tls:
+        insecure: true
+  service:
+    extensions: [health_check]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/tempo]

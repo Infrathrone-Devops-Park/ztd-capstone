@@ -1,0 +1,44 @@
+# Tempo (single-binary, local filesystem storage) for ztd-capstone Phase 5.
+# Chart: grafana/tempo (pinned in terraform/stack/observability.tf).
+#
+# NOTE: this chart is marked `deprecated: true` upstream in favor of
+# grafana/tempo-distributed (microservices mode); it is still published
+# and functional, and single-binary mode is the right fit for our 2x
+# t3.large capacity budget (tempo-distributed would need several
+# separate deployments + object storage). Revisit if Grafana removes
+# the chart from the repo index.
+#
+# Verified via `helm template`: default storage backend is already
+# "local" (filesystem) and the OTLP receivers (grpc 4317 / http 4318)
+# are enabled by default. The rendered Service is named "tempo" and
+# exposes the query/API port on 3200 (NOT 3100 - that's Loki's port).
+# The Grafana Tempo datasource (kube-prometheus-stack.values.yaml)
+# uses http://tempo.observability:3200 accordingly. The OTel Collector
+# exports to tempo.observability:4317 (grpc).
+
+nodeSelector:
+  workload: platform
+
+persistence:
+  enabled: true
+  storageClassName: gp2
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+tempo:
+  retention: 24h
+  # OTLP receivers only - we don't need jaeger/zipkin/opencensus ingestion.
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
