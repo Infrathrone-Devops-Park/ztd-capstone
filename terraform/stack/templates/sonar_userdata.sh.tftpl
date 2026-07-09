@@ -1,0 +1,64 @@
+#!/bin/bash
+set -euo pipefail
+
+# --- OS packages: docker + compose plugin ---------------------------------
+dnf install -y docker
+systemctl enable --now docker
+
+mkdir -p /usr/libexec/docker/cli-plugins
+curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
+  -o /usr/libexec/docker/cli-plugins/docker-compose
+chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+
+# --- kernel tuning required by Elasticsearch (bundled in SonarQube) -------
+cat >/etc/sysctl.d/99-sonarqube.conf <<'EOF'
+vm.max_map_count=524288
+fs.file-max=131072
+EOF
+sysctl --system
+
+# --- fetch DB password from SSM SecureString ------------------------------
+PW=$(aws ssm get-parameter --with-decryption --name "${ssm_pw_name}" --region "${region}" --query 'Parameter.Value' --output text)
+
+mkdir -p /opt/sonar
+cat >/opt/sonar/docker-compose.yml <<EOF
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: $${PW}
+      POSTGRES_DB: sonar
+    volumes:
+      - sonar_db:/var/lib/postgresql/data
+
+  sonarqube:
+    image: sonarqube:community
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: $${PW}
+    ports:
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_extensions:/opt/sonarqube/extensions
+      - sonar_logs:/opt/sonarqube/logs
+
+volumes:
+  sonar_db:
+  sonar_data:
+  sonar_extensions:
+  sonar_logs:
+EOF
+
+cd /opt/sonar
+docker compose up -d
