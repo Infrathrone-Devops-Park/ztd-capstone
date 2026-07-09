@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ztd-capstone-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Infrathrone-Devops-Park/ztd-capstone
+    targetRevision: main
+    path: deploy/helm/ztd-capstone
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+
+  # Manual sync — promotion to staging is a deliberate action, not automatic.
+  syncPolicy: {}

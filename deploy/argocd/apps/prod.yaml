@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ztd-capstone-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Infrathrone-Devops-Park/ztd-capstone
+    targetRevision: main
+    path: deploy/helm/ztd-capstone
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prod
+
+  # Manual sync — promotion to prod is a deliberate, approved action.
+  syncPolicy: {}
