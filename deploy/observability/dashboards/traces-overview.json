@@ -1,0 +1,57 @@
+{
+  "title": "Traces Overview",
+  "uid": "ztd-traces-overview",
+  "tags": ["ztd-capstone", "traces", "tempo"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Trace Search",
+      "type": "traces",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "queryType": "traceql",
+          "query": "{}",
+          "limit": 20,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Root Span Latency (p50/p95/p99, via Tempo metrics-summary)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "description": "Empty until Phase 6 sends real app traces - Tempo datasource wiring/health is what this phase verifies.",
+      "targets": [
+        {
+          "queryType": "traceql",
+          "query": "{ } | select(duration)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Service Graph",
+      "type": "nodeGraph",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "description": "Populated once app services (Phase 6) send OTLP traces through the collector into Tempo.",
+      "targets": [
+        {
+          "queryType": "serviceMap",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
