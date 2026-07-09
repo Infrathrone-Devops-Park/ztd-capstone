@@ -68,7 +68,7 @@ app.kubernetes.io/component: {{ .service }}
 {{/*
 Un-prefixed Service/DNS name for a given service key. Kept stable (no
 release-name prefix) so peer services can reach each other via plain
-short names (e.g. http://catalog:8080) regardless of the Helm release
+short names (e.g. http://catalog (Service port 80)) regardless of the Helm release
 name, and so the Postgres headless Service is reachable as "postgres".
 Usage: include "ztd.svcName" (dict "service" $svcName)
 */}}
