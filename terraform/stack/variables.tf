@@ -96,12 +96,6 @@ variable "sonar_disk_gib" {
   default     = 30
 }
 
-variable "operator_cidr" {
-  description = "Operator IP CIDR (admin ingress default reference)"
-  type        = string
-  default     = "103.133.30.126/32"
-}
-
 variable "sonar_ingress_cidr" {
   description = <<-EOT
     CIDR allowed to reach SonarQube on :9000. Defaults to 0.0.0.0/0 so that
@@ -109,7 +103,7 @@ variable "sonar_ingress_cidr" {
     IPs) can reach the Sonar server for CI scans. This intentionally exposes
     the SonarQube web UI/API to the public internet on port 9000 — access
     control relies on SonarQube's own authentication and CI token, not
-    network restriction. Narrow this to specific CIDRs (e.g. operator_cidr)
+    network restriction. Narrow this to specific CIDRs (e.g. your office IP)
     if public exposure is not acceptable for your environment.
     EOT
   type        = string

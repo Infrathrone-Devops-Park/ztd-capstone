@@ -30,7 +30,6 @@ node_disk_gib      = 30
 sonar_instance_type = "t3.medium"
 sonar_disk_gib      = 30
 
-operator_cidr      = "103.133.30.126/32"
 sonar_ingress_cidr = "0.0.0.0/0"
 
 # sonar_db_password left unset -> auto-generated via random_password

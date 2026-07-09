@@ -9,7 +9,7 @@ resource "random_password" "sonar_db" {
 
 locals {
   sonar_db_password_effective = var.sonar_db_password == "" ? random_password.sonar_db.result : var.sonar_db_password
-  sonar_ssm_pw_name            = "/${var.project}/sonar/db-password"
+  sonar_ssm_pw_name           = "/${var.project}/sonar/db-password"
 }
 
 resource "aws_ssm_parameter" "sonar_db" {
@@ -105,9 +105,17 @@ resource "aws_instance" "sonar" {
 
   associate_public_ip_address = true
 
+  # Require IMDSv2 — this host analyzes arbitrary CI-submitted code, so block
+  # SSRF paths from reaching the unauthenticated IMDSv1 credential endpoint.
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
+  }
+
   root_block_device {
     volume_type = "gp3"
     volume_size = var.sonar_disk_gib
+    encrypted   = true
   }
 
   user_data = templatefile("${path.module}/templates/sonar_userdata.sh.tftpl", {
