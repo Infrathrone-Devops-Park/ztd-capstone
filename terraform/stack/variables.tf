@@ -16,12 +16,6 @@ variable "project" {
   default     = "ztd-capstone"
 }
 
-variable "account_id" {
-  description = "AWS account id (used for tfstate bucket naming consistency)"
-  type        = string
-  default     = "514422154867"
-}
-
 variable "cluster_name" {
   description = "Existing shared EKS cluster name (data source only, never modified)"
   type        = string
@@ -127,4 +121,35 @@ variable "app_deploy_enabled" {
   description = "Toggle for deploying the ztd-capstone app helm_release into dev."
   type        = bool
   default     = true
+}
+
+# ---------------------------------------------------------------------------
+# release.yml (Phase 7 Task 4) promotion targets. Both default OFF (count=0)
+# so a plain `terraform apply` here is a strict no-op for these resources —
+# release.yml explicitly sets `-var deploy_staging=true` /
+# `-var deploy_prod=true` with the promoted tag when it runs.
+# ---------------------------------------------------------------------------
+
+variable "deploy_staging" {
+  description = "Toggle for deploying the ztd-capstone app helm_release into staging (release.yml)."
+  type        = bool
+  default     = false
+}
+
+variable "staging_image_tag" {
+  description = "Image tag to promote to staging. Set via -var staging_image_tag=sha-<gitsha> by release.yml."
+  type        = string
+  default     = ""
+}
+
+variable "deploy_prod" {
+  description = "Toggle for deploying the ztd-capstone app helm_release into prod (release.yml, gated by the GitHub production Environment's manual approval)."
+  type        = bool
+  default     = false
+}
+
+variable "prod_image_tag" {
+  description = "Image tag to promote to prod. Set via -var prod_image_tag=sha-<gitsha> by release.yml."
+  type        = string
+  default     = ""
 }

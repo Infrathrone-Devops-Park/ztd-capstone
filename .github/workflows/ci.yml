@@ -1,0 +1,140 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    strategy:
+      matrix:
+        service: [frontend, api-gateway, orders, catalog]
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: tag
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC, no static keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # ECR repos are image_tag_mutability=IMMUTABLE, so re-running this
+      # workflow for the same commit (e.g. a rerun after only the deploy job
+      # failed) must not re-push an already-published tag.
+      - name: Check whether this tag is already pushed
+        id: exists
+        run: |
+          if aws ecr describe-images \
+              --repository-name "ztd-capstone/${{ matrix.service }}" \
+              --image-ids imageTag="${{ steps.tag.outputs.tag }}" \
+              --region "${{ vars.AWS_REGION }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build image
+        if: steps.exists.outputs.exists != 'true'
+        run: docker build -t "local/${{ matrix.service }}:scan" "services/${{ matrix.service }}"
+
+      - name: Trivy image scan (blocking on HIGH/CRITICAL)
+        if: steps.exists.outputs.exists != 'true'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: local/${{ matrix.service }}:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy-image-${{ matrix.service }}.sarif
+
+      - name: Upload SARIF
+        if: always() && steps.exists.outputs.exists != 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-${{ matrix.service }}.sarif
+          category: trivy-image-${{ matrix.service }}
+
+      - name: Login to ECR
+        if: steps.exists.outputs.exists != 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag + push to ECR
+        if: steps.exists.outputs.exists != 'true'
+        run: |
+          image="${{ vars.ECR_REGISTRY }}/ztd-capstone/${{ matrix.service }}:${{ steps.tag.outputs.tag }}"
+          docker tag "local/${{ matrix.service }}:scan" "$image"
+          docker push "$image"
+
+      - name: Install cosign
+        if: steps.exists.outputs.exists != 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Generate SBOM (SPDX)
+        if: steps.exists.outputs.exists != 'true'
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/out aquasec/trivy:latest image \
+            --format spdx-json -o /out/sbom-${{ matrix.service }}.spdx.json \
+            "local/${{ matrix.service }}:scan"
+
+      - name: Cosign keyless sign + attest SBOM
+        if: steps.exists.outputs.exists != 'true'
+        env:
+          COSIGN_YES: 'true'
+        run: |
+          image="${{ vars.ECR_REGISTRY }}/ztd-capstone/${{ matrix.service }}:${{ steps.tag.outputs.tag }}"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$image")"
+          cosign sign --yes "$digest"
+          cosign attest --yes --predicate "sbom-${{ matrix.service }}.spdx.json" --type spdxjson "$digest"
+
+  deploy-dev:
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: tag
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC, no static keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.15.5'
+
+      # Terraform stays authoritative for the dev release (Phase 6): CI never
+      # runs `helm upgrade` directly. -target scopes the apply (and its
+      # refresh) to the app release + its direct dependencies, which is all
+      # the CI role's permissions (ECR, tfstate S3/DynamoDB, eks:DescribeCluster
+      # + the additive EKS access entry) are provisioned for — it does not
+      # need to read/refresh the nodegroup, SonarQube EC2, or other
+      # AWS-resource state that a full `terraform apply` would also refresh.
+      - name: terraform apply (roll app_image_tag into dev)
+        working-directory: terraform/stack
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve \
+            -var "aws_profile=" \
+            -var "app_image_tag=${{ steps.tag.outputs.tag }}" \
+            -target=helm_release.app

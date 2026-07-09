@@ -131,7 +131,7 @@ resource "kubernetes_config_map" "grafana_dashboards" {
   }
 
   data = {
-    "${each.value}" = file("${path.module}/../../deploy/observability/dashboards/${each.value}")
+    (each.value) = file("${path.module}/../../deploy/observability/dashboards/${each.value}")
   }
 
   depends_on = [helm_release.kube_prometheus_stack]

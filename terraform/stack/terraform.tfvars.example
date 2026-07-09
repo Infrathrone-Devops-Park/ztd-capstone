@@ -4,7 +4,6 @@
 region      = "ap-south-1"
 aws_profile = "infrathrone-new"
 project     = "ztd-capstone"
-account_id  = "514422154867"
 
 cluster_name = "ztd-demo"
 vpc_id       = "vpc-062ffcaf33a87760f"

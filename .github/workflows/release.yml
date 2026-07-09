@@ -1,0 +1,84 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  resolve-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    needs: resolve-tag
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, no static keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.15.5'
+
+      # Promotes the already-built-and-scanned image (built by ci.yml when
+      # this commit was pushed to main) — release.yml never builds/pushes a
+      # new image, it only rolls an existing, immutable ECR tag forward.
+      - name: terraform apply (promote to staging)
+        working-directory: terraform/stack
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve \
+            -var "aws_profile=" \
+            -var "deploy_staging=true" \
+            -var "staging_image_tag=${{ needs.resolve-tag.outputs.image_tag }}" \
+            -target=helm_release.app_staging
+
+  deploy-prod:
+    needs: [resolve-tag, deploy-staging]
+    runs-on: ubuntu-latest
+    # Manual approval gate: configure required reviewers on the "production"
+    # GitHub Environment (repo Settings -> Environments -> production).
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, no static keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.15.5'
+
+      - name: terraform apply (promote to prod)
+        working-directory: terraform/stack
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve \
+            -var "aws_profile=" \
+            -var "deploy_prod=true" \
+            -var "prod_image_tag=${{ needs.resolve-tag.outputs.image_tag }}" \
+            -target=helm_release.app_prod

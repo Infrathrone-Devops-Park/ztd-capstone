@@ -1,0 +1,98 @@
+name: terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  fmt-validate-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [bootstrap, stack]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.15.5'
+
+      - name: terraform fmt -check
+        working-directory: terraform/${{ matrix.dir }}
+        run: terraform fmt -check -recursive
+
+      - name: terraform init (no backend, no AWS creds needed to validate)
+        working-directory: terraform/${{ matrix.dir }}
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        working-directory: terraform/${{ matrix.dir }}
+        run: terraform validate
+
+      - uses: terraform-linters/setup-tflint@v4
+
+      - name: tflint
+        working-directory: terraform/${{ matrix.dir }}
+        run: |
+          tflint --init
+          tflint
+
+  plan-stack:
+    if: github.event_name == 'pull_request'
+    needs: fmt-validate-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, no static keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.15.5'
+
+      # Read-only plan. Scoped with -target to the app_* helm_release
+      # resources: those are what the CI role's permissions (ECR, tfstate
+      # S3/DynamoDB, eks:DescribeCluster + the additive EKS access entry) can
+      # actually refresh. A full, untargeted `terraform plan` here would also
+      # try to refresh the nodegroup/SonarQube EC2/IAM resources, which this
+      # deliberately least-privileged role has no read access to by design
+      # (see terraform/bootstrap/github_oidc.tf) — bootstrap-layer and other
+      # infra changes are planned/applied locally by a human, as in Task 1/2.
+      - name: terraform plan (terraform/stack, app releases only)
+        working-directory: terraform/stack
+        run: |
+          terraform init -input=false
+          terraform plan -input=false -no-color \
+            -var "aws_profile=" \
+            -target=helm_release.app \
+            -target=helm_release.app_staging \
+            -target=helm_release.app_prod \
+            | tee /tmp/plan.txt
+
+      - name: Comment plan on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('/tmp/plan.txt', 'utf8').slice(-60000);
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `#### Terraform Plan (\`terraform/stack\`, app releases)\n<details><summary>Show plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>`
+            });

@@ -9,8 +9,6 @@ data "aws_eks_cluster_auth" "this" {
   name = var.cluster_name
 }
 
-data "aws_caller_identity" "current" {}
-
 # Plain Amazon Linux 2023 AMI for the self-managed SonarQube EC2 instance.
 # (The EKS nodegroup uses ami_type = AL2023_x86_64_STANDARD directly and does
 # not need a raw AMI id, so no EKS-optimized AMI data source is required.)
