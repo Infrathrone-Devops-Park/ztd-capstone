@@ -89,7 +89,7 @@ terraform/stack/
 
 **Files:** `deploy/observability/tempo.values.yaml`, `deploy/observability/opentelemetry-collector.values.yaml`; add `helm_release.tempo` + `helm_release.otel_collector` to `observability.tf`.
 
-**Interfaces:** OTel Collector receives OTLP at `http://opentelemetry-collector.observability:4318` (the endpoint apps will use in Phase 6) and exports to Tempo at `tempo.observability:4317`; Tempo queryable by Grafana at `http://tempo.observability:3100`.
+**Interfaces:** OTel Collector receives OTLP at `http://opentelemetry-collector.observability:4318` (the endpoint apps will use in Phase 6) and exports to Tempo at `tempo.observability:4317`; Tempo queryable by Grafana at `http://tempo.observability:3200`.
 
 - [ ] **Step 1: `tempo.values.yaml`** — Tempo single-binary: `tempo.storage.trace.backend: local`, persistence gp2 10Gi, `nodeSelector: {workload: platform}`, OTLP receivers enabled (grpc 4317 / http 4318), small resources, short retention. Service name must match the Grafana Tempo datasource URL from Task 1 (align).
 - [ ] **Step 2: `opentelemetry-collector.values.yaml`** — `mode: deployment`, `nodeSelector: {workload: platform}`, `config.receivers.otlp` (grpc+http), `config.exporters` → OTLP to `tempo.observability:4317` (tls insecure), `config.service.pipelines.traces` receivers [otlp] exporters [otlp/tempo]. (Optionally a logs/metrics pipeline, but traces are the requirement.) Small resources. Ensure the Service is named `opentelemetry-collector` (or set fullnameOverride) so the app OTLP endpoint `http://opentelemetry-collector.observability:4318` resolves.
