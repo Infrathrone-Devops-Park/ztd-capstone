@@ -16,6 +16,24 @@ RUN npm prune --omit=dev
 
 # ---- Stage 2: runtime ----
 FROM --platform=linux/amd64 node:20-slim AS runtime
+# Pull in all available Debian security updates so the runtime image does not
+# ship fixable OS-package CVEs (the Trivy image gate in ci.yml/pr-checks
+# blocks on HIGH/CRITICAL). Anything left after this is genuinely unfixable
+# (no upstream Debian patch yet) and is enumerated, with justification, in
+# the repo-root .trivyignore.
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get -y --purge autoremove \
+    && rm -rf /var/lib/apt/lists/*
+# The runtime only runs `node dist/index.js` — it never invokes the npm CLI.
+# node:20-slim bundles the npm CLI (/usr/local/lib/node_modules/npm), which
+# drags in a large tree of npm-internal deps (tar, minimatch, glob,
+# cross-spawn, sigstore, ...) that carry their own CVEs and are impossible to
+# patch independently of the base image. Removing it shrinks the runtime
+# attack surface and drops those findings entirely (they aren't our app deps).
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx
 WORKDIR /app
 ENV NODE_ENV=production
 
