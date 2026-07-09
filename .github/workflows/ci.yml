@@ -51,7 +51,7 @@ jobs:
 
       - name: Trivy image scan (blocking on HIGH/CRITICAL)
         if: steps.exists.outputs.exists != 'true'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: local/${{ matrix.service }}:scan
           scanners: vuln
