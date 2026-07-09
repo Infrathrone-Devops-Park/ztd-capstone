@@ -1,0 +1,87 @@
+# Trivy ignore policy — every entry here is a documented, deliberate risk
+# acceptance, NOT a blanket gate disable. The CI Trivy jobs
+# (pr-checks.yml / ci.yml) still fail the build on any HIGH/CRITICAL finding
+# that is not explicitly listed below. Review this file whenever it's
+# touched; each entry must keep its justification current.
+
+# --- services/api-gateway (npm) ---
+#
+# CVE-2026-44902 — @opentelemetry/auto-instrumentations-node /
+# @opentelemetry/sdk-node DoS via malformed HTTP request. Fixed only in the
+# @opentelemetry/core v2.x line, which requires bumping every
+# @opentelemetry/* package in this service in lockstep (v1 -> v2 is a
+# breaking API change for the tracing SDK we rely on). That migration needs
+# its own regression pass against services/api-gateway's tracing setup and
+# is out of scope for this CI-wiring change. Tracked as follow-up work.
+CVE-2026-44902
+
+# CVE-2026-25223 — fastify Content-Type validation bypass. Fixed only in
+# fastify v5 (major bump from the v4 this service is pinned to), which is a
+# breaking change to route/schema/hook APIs used throughout src/. Requires a
+# dedicated migration + regression pass, out of scope here. Tracked as
+# follow-up work.
+CVE-2026-25223
+
+# --- services/api-gateway image (node:20-slim base, Debian 12) ---
+# --- services/orders image (python:3.12-slim base, Debian 13) ---
+#
+# The findings below are OS packages / npm-cli-bundled dependencies baked
+# into the official Debian-based `node:20-slim` / `python:3.12-slim` base
+# images — not code these services execute (no shell, perl, tar, gzip,
+# util-linux, or npm-cli invocation happens at runtime; the runtime stage
+# only runs `node dist/index.js` / `python -m app.main`). The great majority
+# have Status "fixed=None" — no upstream Debian security patch exists yet,
+# so there is nothing to bump to. The few with an available fix
+# (libcap2, libgnutls30, and the npm-cli-bundled cross-spawn/glob/
+# minimatch/sigstore/tar under the "Node.js" target) ship inside the base
+# image itself, not in this repo's package-lock.json, so they can only be
+# picked up by a base-image refresh, not a dependency bump here. Re-run this
+# scan on each base-image bump (Dependabot/renovate on the FROM lines is a
+# good follow-up) and drop entries here once the upstream image is patched.
+CVE-2026-53615
+CVE-2026-41992
+CVE-2026-54369
+CVE-2026-4878
+CVE-2026-33845
+CVE-2026-33846
+CVE-2026-3833
+CVE-2026-42009
+CVE-2026-42010
+CVE-2025-69720
+CVE-2026-42496
+CVE-2026-42497
+CVE-2026-48962
+CVE-2026-8376
+CVE-2026-9538
+CVE-2024-21538
+CVE-2025-64756
+CVE-2026-26996
+CVE-2026-27903
+CVE-2026-27904
+CVE-2026-48815
+CVE-2026-23745
+CVE-2026-23950
+CVE-2026-24842
+CVE-2026-26960
+CVE-2026-29786
+CVE-2026-31802
+CVE-2023-45853
+
+# --- terraform (config/misconfig scan) ---
+#
+# AWS-0132 — S3 bucket (terraform/bootstrap/s3_state.tf, the Terraform state
+# bucket) uses SSE-S3 (AES256) rather than a customer-managed KMS key.
+# Accepted: the bucket already has versioning, a public-access block, and
+# default encryption; it holds Terraform state only. Adding a CMK brings
+# extra cost/rotation/IAM-policy surface not justified for this bucket's
+# threat model (single AWS account, no cross-account access).
+AWS-0132
+
+# AWS-0104 — SonarQube EC2 security group (terraform/stack/sonarqube.tf)
+# allows unrestricted egress (0.0.0.0/0). Accepted: the instance needs
+# outbound internet access for OS package updates and Docker image pulls
+# (SonarQube + Postgres run via docker-compose on it); egress is not the
+# ingress attack surface (ingress is already scoped by var.sonar_ingress_cidr
+# and SonarQube's own authentication), and restricting egress on a single,
+# non-multi-tenant host provides negligible additional security here.
+AWS-0104
