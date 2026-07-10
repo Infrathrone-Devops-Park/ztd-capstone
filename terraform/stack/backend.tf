@@ -5,5 +5,6 @@ terraform {
     region         = "ap-south-1"
     dynamodb_table = "ztd-capstone-tflock"
     encrypt        = true
+    profile        = "infrathrone-new"
   }
 }
