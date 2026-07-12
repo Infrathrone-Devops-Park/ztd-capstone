@@ -25,3 +25,5 @@ cd terraform/stack && terraform destroy  # platform DOWN (shared cluster untouch
 Terraform never manages the shared `ztd-demo` cluster, its default nodegroup, or `ingress-nginx`. Existing infra is read-only. Deploys land only in dedicated namespaces.
 
 <!-- ci demo trigger 2026-07-12T09:27:21Z -->
+
+<!-- ci demo -->
