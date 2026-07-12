@@ -22,7 +22,15 @@ locals {
   github_oidc_thumbprint = "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
 }
 
+# The GitHub Actions OIDC provider is ACCOUNT-WIDE — there can be exactly one
+# `token.actions.githubusercontent.com` provider per AWS account, and it is
+# shared by every repo in the account. So we treat it like other shared infra:
+# adopt the existing one via a data source by default, and only CREATE it on a
+# fresh account (set -var create_github_oidc_provider=true). This makes
+# `terraform apply` idempotent across destroy/recreate cycles instead of failing
+# with EntityAlreadyExists when the provider already exists.
 resource "aws_iam_openid_connect_provider" "github_actions" {
+  count           = var.create_github_oidc_provider ? 1 : 0
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [local.github_oidc_thumbprint]
@@ -32,6 +40,15 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
     managed-by = "terraform"
     layer      = "bootstrap"
   }
+}
+
+data "aws_iam_openid_connect_provider" "github_actions" {
+  count = var.create_github_oidc_provider ? 0 : 1
+  url   = "https://token.actions.githubusercontent.com"
+}
+
+locals {
+  github_oidc_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github_actions[0].arn : data.aws_iam_openid_connect_provider.github_actions[0].arn
 }
 
 # ---------------------------------------------------------------------------
@@ -45,7 +62,7 @@ data "aws_iam_policy_document" "ci_assume_role" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
+      identifiers = [local.github_oidc_arn]
     }
 
     condition {

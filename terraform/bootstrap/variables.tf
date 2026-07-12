@@ -27,3 +27,15 @@ variable "ecr_repositories" {
   type        = list(string)
   default     = ["frontend", "api-gateway", "orders", "catalog"]
 }
+
+variable "create_github_oidc_provider" {
+  description = <<-EOT
+    Whether to CREATE the account-wide GitHub Actions OIDC provider
+    (token.actions.githubusercontent.com). There can be only one per AWS
+    account. Default false = adopt the existing provider via a data source
+    (correct when it already exists, e.g. this account). Set true only on a
+    fresh account that has no such provider yet.
+  EOT
+  type        = bool
+  default     = false
+}
