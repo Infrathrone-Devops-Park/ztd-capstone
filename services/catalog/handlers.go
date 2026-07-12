@@ -63,3 +63,5 @@ func newRouter() http.Handler {
 
 	return mux
 }
+
+// lecture demo: trigger pr-checks (2026-07-12T09:27:02Z)
