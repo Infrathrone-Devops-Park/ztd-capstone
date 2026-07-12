@@ -22,7 +22,7 @@ A production-grade DevOps capstone: a polyglot e-commerce microservice app with 
 - Target cluster is the **existing shared** EKS cluster `arn:aws:eks:ap-south-1:514422154867:cluster/ztd-demo`. Terraform must **never** manage or destroy the base cluster or its `ingress-nginx`.
 - Base cluster nodes are 2× `t3.small` (~4 GB RAM total) — too small for the full stack. A dedicated Terraform-managed nodegroup provides capacity.
 - AWS profile: `infrathrone-new` (account `514422154867`, region `ap-south-1`).
-- Commits authored as **SaiPisey2 <piseysai0202@gmail.com>**; **no Claude attribution** anywhere on GitHub.
+- Commits authored as **SaiPisey2 <piseysai0202@gmail.com>**;
 
 **Discovered cluster facts (2026-07-09)**
 - Nodes: 2× t3.small, Kubernetes v1.31, EKS.
